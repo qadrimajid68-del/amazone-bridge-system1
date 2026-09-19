@@ -10,50 +10,6 @@ export default function Home() {
 
   const AFFILIATE_TAG = process.env.NEXT_PUBLIC_AMAZON_TAG || "majuders-20";
 
-  // Auto Deals Feed
-  const defaultAutoDeals = [
-    {
-      id: "auto-1",
-      title: "Universal 65W USB-C Fast Charger for HP, Dell, Lenovo, Mac",
-      price: "19.99",
-      rating: "4.7",
-      reviews: "1,420",
-      description: "Fast-charging 65W Type-C adapter with multi-device smart protection.",
-      image: "https://m.media-amazon.com/images/I/71hWPnXoO6L._AC_SY355_.jpg",
-      asin: "B0DZ5KG7XG"
-    },
-    {
-      id: "auto-2",
-      title: "Apple MacBook Air 13-inch M2 Chip (256GB SSD)",
-      price: "899.00",
-      rating: "4.8",
-      reviews: "4,850",
-      description: "Supercharged by M2, 18 hours of battery life, Liquid Retina display.",
-      image: "https://m.media-amazon.com/images/I/71f5Eu5lJSL._AC_SL1500_.jpg",
-      asin: "B0B3C57XLR"
-    },
-    {
-      id: "auto-3",
-      title: "Wireless Bluetooth Earbuds with Environmental Noise Cancelling",
-      price: "24.99",
-      rating: "4.6",
-      reviews: "2,190",
-      description: "HiFi stereo bass sound, 40 hours playtime, IPX7 waterproof.",
-      image: "https://m.media-amazon.com/images/I/61bK6PMOC3L._AC_SL1500_.jpg",
-      asin: "B0C7GNBHRT"
-    },
-    {
-      id: "auto-4",
-      title: "Smart Watch for Android and iPhone (Fitness & Heart Rate Tracker)",
-      price: "39.99",
-      rating: "4.5",
-      reviews: "3,110",
-      description: "1.85-inch touch screen, sleep monitor, 100+ sports modes, waterproof.",
-      image: "https://m.media-amazon.com/images/I/61ZjlBOp+rL._AC_SL1500_.jpg",
-      asin: "B0C9QG8Q2Y"
-    }
-  ];
-
   useEffect(() => {
     fetchData();
   }, []);
@@ -61,25 +17,31 @@ export default function Home() {
   const fetchData = async () => {
     try {
       const res = await axios.get(process.env.NEXT_PUBLIC_SHEETY_URL);
-      const sheetProducts = res.data.sheet1 || [];
-      if (sheetProducts.length > 0) {
-        setProducts(sheetProducts);
-      } else {
-        setProducts(defaultAutoDeals);
-      }
+      setProducts(res.data.sheet1 || []);
       setLoading(false);
     } catch (err) {
-      setProducts(defaultAutoDeals);
+      console.error("Error fetching data", err);
       setLoading(false);
     }
   };
 
+  const getNumericRating = (val) => {
+    if (!val) return 4.5;
+    const num = parseFloat(String(val).replace(/[^0-9.]/g, ''));
+    return isNaN(num) ? 4.5 : num;
+  };
+
+  // 🔗 Clean Affiliate Link Maker
   const getAffiliateLink = (p) => {
     if (p.link && p.link.includes('tag=')) return p.link;
-    if (p.asin) return `https://www.amazon.com/dp/${p.asin}?tag=${AFFILIATE_TAG}`;
+    if (p.link) {
+      const clean = p.link.split('?')[0];
+      return `${clean}?tag=${AFFILIATE_TAG}`;
+    }
     return `https://www.amazon.com/?tag=${AFFILIATE_TAG}`;
   };
 
+  // 📋 1-Click Copy Affiliate Link Handler
   const handleCopyLink = (p) => {
     const link = getAffiliateLink(p);
     navigator.clipboard.writeText(link);
@@ -106,7 +68,7 @@ export default function Home() {
           >
             <Phone size={12} />
             <span className="hidden sm:inline">CALL +92 308 1049460</span>
-            <span className="sm:hidden uppercase">CALL NOW</span>
+            <span className="sm:hidden uppercase tracking-tighter">CALL NOW</span>
           </a>
         </div>
       </nav>
@@ -119,10 +81,10 @@ export default function Home() {
               Top Amazon Deals <span className="text-orange-600 font-black">🔥</span>
             </h1>
             <p className="text-gray-500 text-xs md:text-sm mt-1 max-w-lg leading-snug">
-              Quality verified products hand-picked for you with best prices guaranteed.
+              Quality products hand-picked for you. Verified links & best prices guaranteed.
             </p>
           </div>
-          <div className="flex items-center gap-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+          <div className="hidden lg:flex items-center gap-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
             <span className="flex items-center gap-1"><ShieldCheck size={14} className="text-green-500"/> Verified</span>
             <span className="flex items-center gap-1"><PackageCheck size={14} className="text-blue-500"/> Quality</span>
           </div>
@@ -139,6 +101,7 @@ export default function Home() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
             {products.map((product) => {
+              const numericRating = getNumericRating(product.rating);
               const affLink = getAffiliateLink(product);
 
               return (
@@ -146,6 +109,7 @@ export default function Home() {
                   key={product.id} 
                   className="bg-white border border-gray-200 rounded-md overflow-hidden hover:shadow-xl transition-shadow duration-300 flex flex-col group"
                 >
+                  {/* IMAGE */}
                   <div className="relative aspect-square p-4 bg-white flex items-center justify-center overflow-hidden border-b border-gray-50">
                     <img 
                       src={product.image || 'https://images-na.ssl-images-amazon.com/images/I/41-e5UA3mEL.jpg'} 
@@ -160,9 +124,10 @@ export default function Home() {
                     </div>
                   </div>
 
+                  {/* INFO */}
                   <div className="p-4 flex flex-col flex-grow">
                     <h3 className="text-slate-900 font-semibold text-sm leading-snug line-clamp-2 min-h-[2.5rem] mb-1.5 group-hover:text-blue-700 transition-colors">
-                      {product.title}
+                      {product.title || 'Amazon Deal Product'}
                     </h3>
 
                     {product.description && (
@@ -171,25 +136,27 @@ export default function Home() {
                       </p>
                     )}
 
+                    {/* STARS */}
                     <div className="flex items-center gap-1.5 mb-3">
                       <div className="flex items-center">
                         {[...Array(5)].map((_, i) => (
                           <Star 
                             key={i} 
                             size={12} 
-                            fill={i < Math.floor(parseFloat(product.rating || 4.5)) ? "#ffa41c" : "none"} 
+                            fill={i < Math.floor(numericRating) ? "#ffa41c" : "none"} 
                             className="text-[#ffa41c]" 
                           />
                         ))}
                       </div>
                       <span className="text-[11px] text-slate-800 font-bold">
-                        {product.rating || '4.6'}
+                        {numericRating.toFixed(1)}
                       </span>
-                      <span className="text-[10px] text-blue-600 font-medium">
+                      <span className="text-[10px] text-blue-600 font-medium hover:underline cursor-pointer">
                         ({product.reviews || '500+'})
                       </span>
                     </div>
 
+                    {/* PRICE & BUTTONS */}
                     <div className="mt-auto pt-2 space-y-2">
                       <div className="flex items-baseline gap-1">
                         <span className="text-xs font-bold text-slate-500">$</span>
@@ -198,27 +165,29 @@ export default function Home() {
                         </span>
                       </div>
                       
+                      {/* Button 1: Buy on Amazon */}
                       <a 
                         href={affLink} 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        className="w-full flex items-center justify-center gap-2 bg-[#ffd814] hover:bg-[#f7ca00] text-[#0f1111] text-xs font-bold py-2 rounded-full shadow-sm border border-[#fcd200] active:scale-95 transition-all"
+                        className="w-full flex items-center justify-center gap-2 bg-[#ffd814] hover:bg-[#f7ca00] text-[#0f1111] text-xs font-bold py-2.5 rounded-full shadow-sm border border-[#fcd200] active:scale-95 transition-all"
                       >
                         Shop on Amazon <ExternalLink size={13} />
                       </a>
 
+                      {/* Button 2: 📲 Share / Copy Affiliate Link */}
                       <button
                         onClick={() => handleCopyLink(product)}
-                        className="w-full flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold py-1.5 rounded-full border border-gray-200 active:scale-95 transition-all"
+                        className="w-full flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold py-2 rounded-full border border-gray-200 active:scale-95 transition-all"
                       >
                         {copiedId === product.id ? (
                           <>
-                            <Check size={12} className="text-green-600" />
-                            <span className="text-green-600">Affiliate Link Copied!</span>
+                            <Check size={13} className="text-green-600" />
+                            <span className="text-green-600 font-bold">Affiliate Link Copied!</span>
                           </>
                         ) : (
                           <>
-                            <Share2 size={12} className="text-slate-500" />
+                            <Share2 size={13} className="text-slate-500" />
                             <span>Share / Copy Affiliate Link</span>
                           </>
                         )}
@@ -228,6 +197,13 @@ export default function Home() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!loading && products.length === 0 && (
+          <div className="text-center py-20">
+            <p className="text-gray-400 font-bold italic">Checking warehouse for new stock...</p>
           </div>
         )}
       </main>
@@ -248,6 +224,10 @@ export default function Home() {
             <div className="space-y-3">
               <h4 className="text-[#febd69] text-[10px] font-black uppercase tracking-[3px]">Support</h4>
               <p className="text-xl font-bold">+92 308 1049460</p>
+              <div className="flex justify-center md:justify-start gap-3 mt-2">
+                <span className="text-[10px] bg-white/10 px-2 py-1 rounded">WHATSAPP</span>
+                <span className="text-[10px] bg-white/10 px-2 py-1 rounded">24/7 SUPPORT</span>
+              </div>
             </div>
 
             <div className="bg-[#131921] p-4 rounded border border-gray-700">
