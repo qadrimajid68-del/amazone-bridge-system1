@@ -22,6 +22,13 @@ export default function Home() {
     }
   };
 
+  // Safe Rating Parser (Kabhi NaN ya crash nahi hoga)
+  const getNumericRating = (val) => {
+    if (!val) return 4.5;
+    const num = parseFloat(String(val).replace(/[^0-9.]/g, ''));
+    return isNaN(num) ? 4.5 : num;
+  };
+
   return (
     <div className="min-h-screen bg-[#f1f3f6] text-slate-800 font-sans">
       
@@ -75,55 +82,86 @@ export default function Home() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
-            {products.map((product) => (
-              <div 
-                key={product.id} 
-                className="bg-white border border-gray-200 rounded-md overflow-hidden hover:shadow-xl transition-shadow duration-300 flex flex-col"
-              >
-                {/* Image Container */}
-                <div className="relative aspect-square p-4 bg-white flex items-center justify-center overflow-hidden">
-                  <img 
-                    src={product.image || 'https://via.placeholder.com/300'} 
-                    alt={product.title} 
-                    className="w-full h-full object-contain hover:scale-105 transition-transform duration-500"
-                  />
-                  <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded-sm shadow-sm">
-                    DEAL
-                  </div>
-                </div>
+            {products.map((product) => {
+              const numericRating = getNumericRating(product.rating);
 
-                {/* Product Info */}
-                <div className="p-4 flex flex-col flex-grow">
-                  <h3 className="text-slate-800 font-medium text-sm leading-tight h-10 overflow-hidden mb-2 group-hover:text-blue-700">
-                    {product.title}
-                  </h3>
-                  
-                  {/* Dummy Stars for Amazon Feel */}
-                  <div className="flex items-center gap-0.5 mb-2">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} size={12} fill="#ffa41c" className="text-[#ffa41c]" />
-                    ))}
-                    <span className="text-[10px] text-blue-600 font-bold ml-1 hover:underline cursor-pointer">5,000+</span>
-                  </div>
-
-                  <div className="mt-auto">
-                    <div className="flex items-baseline gap-1 mb-3">
-                      <span className="text-xs font-bold text-slate-500">$</span>
-                      <span className="text-2xl font-bold text-slate-900 leading-none">{product.price}</span>
+              return (
+                <div 
+                  key={product.id} 
+                  className="bg-white border border-gray-200 rounded-md overflow-hidden hover:shadow-xl transition-shadow duration-300 flex flex-col group"
+                >
+                  {/* 🖼️ IMAGE CONTAINER WITH ERROR-FALLBACK */}
+                  <div className="relative aspect-square p-4 bg-white flex items-center justify-center overflow-hidden border-b border-gray-50">
+                    <img 
+                      src={product.image || 'https://images-na.ssl-images-amazon.com/images/I/41-e5UA3mEL.jpg'} 
+                      alt={product.title || 'Product'} 
+                      className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                      onError={(e) => {
+                        // Agar image block ho ya na chalay to Amazon official default image laga do
+                        e.currentTarget.src = "https://images-na.ssl-images-amazon.com/images/I/41-e5UA3mEL.jpg";
+                      }}
+                    />
+                    <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded-sm shadow-sm">
+                      DEAL
                     </div>
-                    
-                    <a 
-                      href={product.link} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="w-full flex items-center justify-center gap-2 bg-[#ffd814] hover:bg-[#f7ca00] text-[#0f1111] text-xs font-bold py-2.5 rounded-full shadow-sm border border-[#fcd200] active:scale-95 transition-all"
-                    >
-                      Shop on Amazon <ExternalLink size={14} />
-                    </a>
+                  </div>
+
+                  {/* 📦 PRODUCT DETAILS SECTION */}
+                  <div className="p-4 flex flex-col flex-grow">
+                    {/* Real Title */}
+                    <h3 className="text-slate-900 font-semibold text-sm leading-snug line-clamp-2 min-h-[2.5rem] mb-1.5 group-hover:text-blue-700 transition-colors">
+                      {product.title || 'Amazon Deal Product'}
+                    </h3>
+
+                    {/* 📝 Real Description / Highlights */}
+                    {product.description && (
+                      <p className="text-gray-500 text-[11px] line-clamp-2 leading-relaxed mb-2.5 font-normal">
+                        {product.description}
+                      </p>
+                    )}
+
+                    {/* ⭐ Dynamic Stars & Ratings */}
+                    <div className="flex items-center gap-1.5 mb-3">
+                      <div className="flex items-center">
+                        {[...Array(5)].map((_, i) => (
+                          <Star 
+                            key={i} 
+                            size={12} 
+                            fill={i < Math.floor(numericRating) ? "#ffa41c" : "none"} 
+                            className="text-[#ffa41c]" 
+                          />
+                        ))}
+                      </div>
+                      <span className="text-[11px] text-slate-800 font-bold">
+                        {numericRating.toFixed(1)}
+                      </span>
+                      <span className="text-[10px] text-blue-600 font-medium hover:underline cursor-pointer">
+                        ({product.reviews || '500+'})
+                      </span>
+                    </div>
+
+                    {/* 💰 PRICE & SHOP BUTTON */}
+                    <div className="mt-auto pt-2">
+                      <div className="flex items-baseline gap-1 mb-3">
+                        <span className="text-xs font-bold text-slate-500">$</span>
+                        <span className="text-2xl font-black text-slate-900 leading-none">
+                          {product.price ? product.price.replace(/[^0-9.]/g, '') : 'Check Price'}
+                        </span>
+                      </div>
+                      
+                      <a 
+                        href={product.link || '#'} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center justify-center gap-2 bg-[#ffd814] hover:bg-[#f7ca00] text-[#0f1111] text-xs font-bold py-2.5 rounded-full shadow-sm border border-[#fcd200] active:scale-95 transition-all"
+                      >
+                        Shop on Amazon <ExternalLink size={14} />
+                      </a>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -142,7 +180,9 @@ export default function Home() {
             
             {/* Business Card */}
             <div className="space-y-3">
-              <span className="text-lg font-bold tracking-tight">MAJU<span className="text-[#febd69]">TRADER</span></span>
+              <span className="text-lg font-bold tracking-tight">
+                MAJU<span className="text-[#febd69]">TRADER</span>
+              </span>
               <p className="text-gray-300 text-xs leading-relaxed max-w-xs mx-auto md:mx-0 font-medium italic">
                 Your direct bridge to the world's best marketplace. High quality items, sourced specifically for our customers.
               </p>

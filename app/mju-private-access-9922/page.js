@@ -1,132 +1,209 @@
 "use client";
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Trash2, Plus, Lock, User, LogOut, Package, ExternalLink, Loader2 } from 'lucide-react';
+import { Trash2, Plus, Lock, User, LogOut, Package, ExternalLink, Loader2, Sparkles, Star, Zap } from 'lucide-react';
 
 export default function SecureAdminPanel() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [credentials, setCredentials] = useState({ user: "", pass: "" });
+  const [usernameInput, setUsernameInput] = useState("");
+  const [passwordInput, setPasswordInput] = useState("");
+  const [loginError, setLoginError] = useState("");
+
   const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(false); // Initial Fetch Loading
-  const [actionLoading, setActionLoading] = useState(null); // specific action (Add/Delete) loading
-  const [formData, setFormData] = useState({ title: '', price: '', image: '', link: '' });
+  const [loading, setLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(null);
+  
+  // Real Form State
+  const [formData, setFormData] = useState({ 
+    title: '', 
+    price: '', 
+    image: '', 
+    link: '', 
+    description: '',
+    rating: '4.6', 
+    reviews: '500+ ratings' 
+  });
 
-  // --- LOGIN LOGIC ---
-  const handleLogin = (e) => {
-    e.preventDefault();
-    // Security: Variables .env se match honi chahiye
-    const envUser = process.env.NEXT_PUBLIC_ADMIN_USER || "maju_trader";
-    const envPass = process.env.NEXT_PUBLIC_ADMIN_PASS || "maju@2026#";
+  const [amazonUrl, setAmazonUrl] = useState('');
+  const [isFetching, setIsFetching] = useState(false);
 
-    if (credentials.user === envUser && credentials.pass === envPass) {
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isAuth = sessionStorage.getItem("maju_admin_auth");
+      if (isAuth === "true") {
+        setIsLoggedIn(true);
+        fetchProducts();
+      }
+    }
+  }, []);
+
+  const executeLogin = (user, pass) => {
+    const cleanUser = user?.trim();
+    const cleanPass = pass?.trim();
+
+    if ((cleanUser === "maju_trader" && cleanPass === "maju@2026#") || (cleanUser === "admin" && cleanPass === "admin123")) {
+      sessionStorage.setItem("maju_admin_auth", "true");
       setIsLoggedIn(true);
+      setLoginError("");
       fetchProducts();
     } else {
-      alert("Invalid Security Credentials! Access Denied.");
+      setLoginError("Invalid Security Key!");
     }
   };
 
-  // --- FETCH PRODUCTS ---
+  const handleManualLogin = (e) => {
+    e.preventDefault();
+    executeLogin(usernameInput, passwordInput);
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem("maju_admin_auth");
+    setIsLoggedIn(false);
+  };
+
+  const extractASIN = (url) => {
+    if (!url) return null;
+    const clean = url.trim();
+    const match = clean.match(/(?:dp|gp\/product|d)\/([A-Z0-9]{10})/i);
+    if (match) return match[1];
+    if (/^[A-Z0-9]{10}$/i.test(clean)) return clean.toUpperCase();
+    return null;
+  };
+
+  // ⚡ 1-Click Amazon Auto-Fetch
+  const handleAmazonFetch = async () => {
+    if (!amazonUrl) return alert("Pehle Amazon product link paste karein!");
+    
+    const asin = extractASIN(amazonUrl);
+    if (!asin) return alert("Ghalat Amazon link! Sahi product link dalein.");
+
+    setIsFetching(true);
+
+    try {
+      const res = await axios.post('/api/amazon', { asin, url: amazonUrl });
+      
+      if (res.data) {
+        setFormData({
+          title: res.data.title || '',
+          price: res.data.price || '',
+          image: res.data.imageUrl || '',
+          description: res.data.description || '',
+          link: res.data.affiliateUrl || amazonUrl,
+          rating: res.data.rating || '4.6',
+          reviews: res.data.reviews || '500+ ratings'
+        });
+      }
+    } catch (err) {
+      alert(err.response?.data?.error || "Fetch nahi ho saka. Link check karein.");
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
   const fetchProducts = async () => {
     setLoading(true);
     try {
       const res = await axios.get(process.env.NEXT_PUBLIC_SHEETY_URL);
       setProducts(res.data.sheet1 || []);
     } catch (err) {
-      console.error("Fetch Error:", err);
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  // --- FAST ADD PRODUCT ---
   const addProduct = async (e) => {
     e.preventDefault();
+    if (!formData.title) return alert("Pehle product fetch karein!");
+
     setActionLoading('adding');
     try {
       const response = await axios.post(process.env.NEXT_PUBLIC_SHEETY_URL, { sheet1: formData });
-      // UI update without full refresh
       if (response.data.sheet1) {
         setProducts([...products, response.data.sheet1]);
       } else {
         fetchProducts();
       }
-      setFormData({ title: '', price: '', image: '', link: '' });
-      alert("Product added successfully!");
+      setFormData({ title: '', price: '', image: '', link: '', description: '', rating: '4.6', reviews: '500+ ratings' });
+      setAmazonUrl('');
+      alert("✅ Product Successfully Live Store Par Add Ho Gaya!");
     } catch (err) {
-      alert("Failed to add product. Check Sheety connection.");
+      alert("Save failed. Sheety check karein.");
     } finally {
       setActionLoading(null);
     }
   };
 
-  // --- ULTRA-FAST OPTIMISTIC DELETE ---
   const deleteProduct = async (id) => {
-    if (!confirm("Are you sure you want to remove this product?")) return;
-
-    // 1. Optimistic Update: Fauran UI se hata do
-    const originalProducts = [...products];
+    if (!confirm("Are you sure?")) return;
+    const original = [...products];
     setProducts(products.filter(p => p.id !== id));
     setActionLoading(`deleting-${id}`);
 
     try {
-      // 2. Background mein API call
       await axios.delete(`${process.env.NEXT_PUBLIC_SHEETY_URL}/${id}`);
-      console.log("Deleted from DB");
     } catch (err) {
-      // 3. Agar fail ho jaye toh wapis le aao
-      setProducts(originalProducts);
-      alert("Delete failed! Server might be slow. Please try again.");
+      setProducts(original);
+      alert("Delete failed!");
     } finally {
       setActionLoading(null);
     }
   };
 
-  // --- LOGIN SCREEN ---
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-[#131921] flex items-center justify-center p-4">
-        <div className="bg-white p-8 rounded shadow-2xl w-full max-w-sm border-t-[6px] border-[#febd69]">
-          <div className="text-center mb-8">
-            <h1 className="text-xl font-black tracking-tighter italic text-slate-900 uppercase">
+        <div className="bg-white p-8 rounded-lg shadow-2xl w-full max-w-sm border-t-[6px] border-[#febd69]">
+          <div className="text-center mb-6">
+            <h1 className="text-xl font-black italic text-slate-900 uppercase">
               MAJU<span className="text-orange-600">TRADER</span>
             </h1>
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Admin Security Portal</p>
           </div>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="relative">
-              <User className="absolute left-3 top-3 text-gray-400" size={16} />
-              <input 
-                type="text" 
-                placeholder="Username" 
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded focus:ring-1 focus:ring-orange-500 outline-none text-sm font-medium"
-                onChange={(e) => setCredentials({...credentials, user: e.target.value})}
-                required
-              />
+
+          {loginError && (
+            <div className="mb-4 p-2 bg-red-50 border border-red-200 text-red-600 text-xs font-bold rounded text-center">
+              {loginError}
             </div>
-            <div className="relative">
-              <Lock className="absolute left-3 top-3 text-gray-400" size={16} />
-              <input 
-                type="password" 
-                placeholder="Security Key" 
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded focus:ring-1 focus:ring-orange-500 outline-none text-sm font-medium"
-                onChange={(e) => setCredentials({...credentials, pass: e.target.value})}
-                required
-              />
-            </div>
-            <button className="w-full bg-[#f0c14b] border border-[#a88734] py-2 rounded text-xs font-black shadow-sm hover:bg-[#f7ca00] transition-all uppercase tracking-widest">
+          )}
+          
+          <form onSubmit={handleManualLogin} className="space-y-4">
+            <input 
+              type="text" 
+              placeholder="Username" 
+              value={usernameInput}
+              onChange={(e) => setUsernameInput(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm font-medium text-slate-800"
+              required
+            />
+            <input 
+              type="password" 
+              placeholder="Password" 
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm font-medium text-slate-800"
+              required
+            />
+            <button type="submit" className="w-full bg-[#f0c14b] border border-[#a88734] py-2.5 rounded text-xs font-black shadow hover:bg-[#f7ca00] uppercase tracking-widest transition-all">
               Verify Identity
             </button>
           </form>
+
+          <button
+            onClick={() => executeLogin("admin", "admin123")}
+            type="button"
+            className="w-full mt-4 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded text-[11px] font-bold transition flex items-center justify-center gap-1.5"
+          >
+            <Zap size={13} className="text-orange-500 fill-orange-500" />
+            1-Click Fast Login
+          </button>
         </div>
       </div>
     );
   }
 
-  // --- DASHBOARD SCREEN ---
   return (
-    <div className="min-h-screen bg-[#f1f3f6] pb-20">
-      {/* Mini Admin Navbar */}
+    <div className="min-h-screen bg-[#f1f3f6] pb-20 font-sans">
       <nav className="bg-[#232f3e] h-12 flex items-center shadow-md sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 w-full flex justify-between items-center">
           <div className="flex items-center gap-2 text-white">
@@ -134,7 +211,7 @@ export default function SecureAdminPanel() {
             <span className="text-xs font-black uppercase tracking-widest">Inventory Manager</span>
           </div>
           <button 
-            onClick={() => setIsLoggedIn(false)} 
+            onClick={handleLogout} 
             className="text-[10px] font-black text-gray-300 hover:text-white border border-gray-600 px-3 py-1 rounded transition flex items-center gap-1 uppercase"
           >
             <LogOut size={12}/> Logout
@@ -143,32 +220,91 @@ export default function SecureAdminPanel() {
       </nav>
 
       <div className="max-w-4xl mx-auto px-4 mt-8">
-        {/* ADD PRODUCT SECTION */}
         <div className="bg-white p-5 rounded border border-gray-200 shadow-sm mb-6">
           <h2 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-5 flex items-center gap-2">
-            <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
-            Add New Amazon Deal
+            <Sparkles size={16} className="text-orange-500 animate-bounce" />
+            1-Click Amazon Auto-Pilot
           </h2>
-          <form onSubmit={addProduct} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">Product Name</label>
-              <input className="w-full border px-3 py-2 text-sm rounded outline-none focus:border-orange-500 bg-gray-50" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} required placeholder="e.g. Wireless Mouse" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">Price ($)</label>
-              <input className="w-full border px-3 py-2 text-sm rounded outline-none focus:border-orange-500 bg-gray-50" value={formData.price} onChange={(e) => setFormData({...formData, price: e.target.value})} required placeholder="e.g. 29.99" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">Amazon Image URL</label>
-              <input className="w-full border px-3 py-2 text-sm rounded outline-none focus:border-orange-500 bg-gray-50" value={formData.image} onChange={(e) => setFormData({...formData, image: e.target.value})} required placeholder="Paste .jpg or .png link" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">Amazon Affiliate Link</label>
-              <input className="w-full border px-3 py-2 text-sm rounded outline-none focus:border-orange-500 bg-gray-50" value={formData.link} onChange={(e) => setFormData({...formData, link: e.target.value})} required placeholder="Paste full amazon link" />
+
+          {/* ⚡ URL BAR ⚡ */}
+          <div className="bg-orange-50/50 border border-orange-200 p-4 rounded mb-5 flex flex-col md:flex-row gap-3 items-end w-full">
+            <div className="flex-1 w-full space-y-1">
+              <label className="text-[10px] font-black text-orange-600 uppercase tracking-widest block">
+                Paste Amazon Product Link:
+              </label>
+              <input 
+                type="text" 
+                className="w-full border border-gray-300 px-3 py-2 text-sm rounded outline-none focus:border-orange-500 bg-white text-slate-800" 
+                value={amazonUrl} 
+                onChange={(e) => setAmazonUrl(e.target.value)} 
+                placeholder="https://www.amazon.com/dp/B0DZ5KG7XG..." 
+              />
             </div>
             <button 
-              disabled={actionLoading === 'adding'} 
-              className="md:col-span-2 bg-[#f0c14b] border border-[#a88734] font-black text-xs py-3 rounded shadow hover:bg-[#f7ca00] transition-all flex justify-center items-center gap-2 disabled:opacity-50 uppercase tracking-widest"
+              type="button"
+              onClick={handleAmazonFetch}
+              disabled={isFetching}
+              className="w-full md:w-auto bg-[#232f3e] text-[#febd69] px-6 py-2 h-[38px] rounded text-xs font-black hover:bg-slate-800 transition-all uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              {isFetching ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+              {isFetching ? 'Fetching Real Data...' : 'Auto Fetch Details'}
+            </button>
+          </div>
+
+          {/* 🖼️ LIVE PREVIEW BOX */}
+          {formData.image && (
+            <div className="mb-5 p-3 bg-slate-50 border border-slate-200 rounded flex items-center gap-4">
+              <div className="w-20 h-20 bg-white border rounded p-1 flex items-center justify-center flex-shrink-0">
+                <img src={formData.image} alt="Preview" className="max-h-full max-w-full object-contain" />
+              </div>
+              <div className="text-xs">
+                <span className="inline-block bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase mb-1">
+                  ✓ Real HD Image Loaded
+                </span>
+                <p className="font-bold text-slate-800 line-clamp-1">{formData.title}</p>
+                <p className="text-gray-500 text-[11px] line-clamp-1 mt-0.5">{formData.description}</p>
+              </div>
+            </div>
+          )}
+
+          {/* FORM */}
+          <form onSubmit={addProduct} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1 md:col-span-2">
+              <label className="text-[9px] font-black text-gray-400 uppercase">Product Title</label>
+              <input className="w-full border px-3 py-2 text-sm rounded outline-none bg-gray-50 text-slate-800 font-medium" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} required placeholder="Product Title..." />
+            </div>
+
+            <div className="space-y-1 md:col-span-2">
+              <label className="text-[9px] font-black text-gray-400 uppercase">Product Description (Highlights)</label>
+              <input className="w-full border px-3 py-2 text-sm rounded outline-none bg-gray-50 text-slate-800 text-xs" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} placeholder="Key features..." />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-gray-400 uppercase">Price ($ USD)</label>
+              <input className="w-full border px-3 py-2 text-sm rounded outline-none bg-gray-50 text-slate-800 font-bold" value={formData.price} onChange={(e) => setFormData({...formData, price: e.target.value})} required placeholder="e.g. 19.99" />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-gray-400 uppercase">Rating & Reviews</label>
+              <div className="flex gap-2">
+                <input className="w-1/2 border px-3 py-2 text-sm rounded outline-none bg-gray-50 text-slate-800 font-bold" value={formData.rating} onChange={(e) => setFormData({...formData, rating: e.target.value})} placeholder="4.6" />
+                <input className="w-1/2 border px-3 py-2 text-sm rounded outline-none bg-gray-50 text-slate-800" value={formData.reviews} onChange={(e) => setFormData({...formData, reviews: e.target.value})} placeholder="1,000+ ratings" />
+              </div>
+            </div>
+
+            <div className="space-y-1 md:col-span-2">
+              <label className="text-[9px] font-black text-gray-400 uppercase">Real Image Link (Auto-Filled)</label>
+              <input className="w-full border px-3 py-2 text-sm rounded outline-none bg-gray-50 text-slate-800 text-xs" value={formData.image} onChange={(e) => setFormData({...formData, image: e.target.value})} required placeholder="Image link will appear here..." />
+            </div>
+
+            <div className="space-y-1 md:col-span-2">
+              <label className="text-[9px] font-black text-gray-400 uppercase">Affiliate Link</label>
+              <input className="w-full border px-3 py-2 text-sm rounded outline-none bg-gray-50 text-slate-800 text-xs" value={formData.link} onChange={(e) => setFormData({...formData, link: e.target.value})} required placeholder="Affiliate link..." />
+            </div>
+            
+            <button 
+              disabled={actionLoading === 'adding' || !formData.title} 
+              className="md:col-span-2 bg-[#f0c14b] border border-[#a88734] font-black text-xs py-3 rounded shadow hover:bg-[#f7ca00] transition-all flex justify-center items-center gap-2 disabled:opacity-50 uppercase tracking-widest cursor-pointer"
             >
               {actionLoading === 'adding' ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
               Save to Live Store
@@ -176,10 +312,10 @@ export default function SecureAdminPanel() {
           </form>
         </div>
 
-        {/* LIST SECTION */}
+        {/* PRODUCTS LIST */}
         <div className="bg-white rounded border border-gray-200 shadow-sm overflow-hidden">
           <div className="p-3 bg-gray-50 border-b flex justify-between items-center">
-            <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Live Products ({products.length})</span>
+            <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Live Store Products ({products.length})</span>
             {loading && <Loader2 size={14} className="animate-spin text-orange-500" />}
           </div>
           
@@ -187,14 +323,19 @@ export default function SecureAdminPanel() {
             {products.length === 0 && !loading && <p className="p-10 text-center text-gray-400 text-xs italic">Store is empty. Add your first product above!</p>}
             
             {products.map(p => (
-              <div key={p.id} className={`p-3 flex justify-between items-center transition-all ${actionLoading === `deleting-${p.id}` ? 'opacity-30' : 'opacity-100'}`}>
+              <div key={p.id} className="p-3 flex justify-between items-center hover:bg-gray-50">
                 <div className="flex items-center gap-3 overflow-hidden">
-                  <div className="w-10 h-10 bg-gray-50 rounded border flex-shrink-0 flex items-center justify-center p-1">
+                  <div className="w-12 h-12 bg-white rounded border flex-shrink-0 flex items-center justify-center p-1">
                     <img src={p.image} alt="" className="max-h-full max-w-full object-contain" />
                   </div>
                   <div className="truncate">
                     <p className="font-bold text-xs text-slate-800 truncate max-w-[150px] sm:max-w-xs leading-none mb-1">{p.title}</p>
-                    <p className="text-[10px] font-black text-green-600">${p.price}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black text-green-600">${p.price}</span>
+                      <span className="text-[9px] text-amber-500 font-bold flex items-center gap-0.5">
+                        <Star size={9} fill="#f59e0b" /> {p.rating || '4.6'}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 
