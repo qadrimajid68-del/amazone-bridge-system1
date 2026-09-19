@@ -1,7 +1,10 @@
 "use client";
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Trash2, Plus, Lock, User, LogOut, Package, ExternalLink, Loader2, Sparkles, Star, Zap } from 'lucide-react';
+import { 
+  Trash2, Plus, Lock, User, LogOut, Package, ExternalLink, 
+  Loader2, Sparkles, Star, Zap, Copy, Check, ArrowRight, Link as LinkIcon 
+} from 'lucide-react';
 
 export default function SecureAdminPanel() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -13,7 +16,7 @@ export default function SecureAdminPanel() {
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
   
-  // Real Form State
+  // Form State
   const [formData, setFormData] = useState({ 
     title: '', 
     price: '', 
@@ -26,6 +29,13 @@ export default function SecureAdminPanel() {
 
   const [amazonUrl, setAmazonUrl] = useState('');
   const [isFetching, setIsFetching] = useState(false);
+
+  // 🛠️ ADMIN-ONLY AFFILIATE LINK MAKER TOOL STATES
+  const [toolInput, setToolInput] = useState('');
+  const [toolOutput, setToolOutput] = useState('');
+  const [toolCopied, setToolCopied] = useState(false);
+
+  const AFFILIATE_TAG = process.env.NEXT_PUBLIC_AMAZON_TAG || "majuders-20";
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -47,7 +57,7 @@ export default function SecureAdminPanel() {
       setLoginError("");
       fetchProducts();
     } else {
-      setLoginError("Invalid Security Key!");
+      setLoginError("Invalid Credentials!");
     }
   };
 
@@ -61,26 +71,13 @@ export default function SecureAdminPanel() {
     setIsLoggedIn(false);
   };
 
-  const extractASIN = (url) => {
-    if (!url) return null;
-    const clean = url.trim();
-    const match = clean.match(/(?:dp|gp\/product|d)\/([A-Z0-9]{10})/i);
-    if (match) return match[1];
-    if (/^[A-Z0-9]{10}$/i.test(clean)) return clean.toUpperCase();
-    return null;
-  };
-
-  // ⚡ 1-Click Amazon Auto-Fetch
+  // ⚡ 1-Click Amazon Auto-Fetch (Supports amzn.to short links)
   const handleAmazonFetch = async () => {
-    if (!amazonUrl) return alert("Pehle Amazon product link paste karein!");
-    
-    const asin = extractASIN(amazonUrl);
-    if (!asin) return alert("Ghalat Amazon link! Sahi product link dalein.");
-
+    if (!amazonUrl) return alert("Pehle Amazon link paste karein!");
     setIsFetching(true);
 
     try {
-      const res = await axios.post('/api/amazon', { asin, url: amazonUrl });
+      const res = await axios.post('/api/amazon', { url: amazonUrl });
       
       if (res.data) {
         setFormData({
@@ -98,6 +95,23 @@ export default function SecureAdminPanel() {
     } finally {
       setIsFetching(false);
     }
+  };
+
+  // 🛠️ ADMIN TOOL: Generate Affiliate Link Instantly
+  const handleGenerateToolLink = (e) => {
+    e.preventDefault();
+    if (!toolInput) return;
+
+    const match = toolInput.match(/(?:dp|gp\/product|d)\/([A-Z0-9]{10})/i);
+    let finalUrl = '';
+    if (match) {
+      finalUrl = `https://www.amazon.com/dp/${match[1]}?tag=${AFFILIATE_TAG}`;
+    } else {
+      const clean = toolInput.split('?')[0];
+      finalUrl = `${clean}?tag=${AFFILIATE_TAG}`;
+    }
+
+    setToolOutput(finalUrl);
   };
 
   const fetchProducts = async () => {
@@ -219,25 +233,72 @@ export default function SecureAdminPanel() {
         </div>
       </nav>
 
-      <div className="max-w-4xl mx-auto px-4 mt-8">
-        <div className="bg-white p-5 rounded border border-gray-200 shadow-sm mb-6">
-          <h2 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-5 flex items-center gap-2">
+      <div className="max-w-4xl mx-auto px-4 mt-8 space-y-6">
+
+        {/* 🛠️ 1. PRIVATE AFFILIATE LINK MAKER (Sirf Admin Ke Liye) */}
+        <div className="bg-[#131921] p-4 rounded-lg border border-gray-700 shadow-md text-white">
+          <div className="flex items-center gap-2 mb-2">
+            <LinkIcon size={16} className="text-[#febd69]" />
+            <h3 className="text-xs font-black uppercase tracking-wider text-[#febd69]">
+              Private Affiliate Link Maker
+            </h3>
+          </div>
+          <p className="text-[11px] text-gray-300 mb-3">
+            Kisi bhi Amazon product ka link dalein aur apna Commission Link bana kar WhatsApp ya clients ko share karein:
+          </p>
+
+          <form onSubmit={handleGenerateToolLink} className="flex flex-col sm:flex-row gap-2">
+            <input 
+              type="text" 
+              placeholder="Paste any Amazon link (e.g. https://amzn.to/47Y2hVI or amazon.com/dp/...)" 
+              value={toolInput}
+              onChange={(e) => setToolInput(e.target.value)}
+              className="flex-1 bg-white text-slate-800 px-3 py-2 rounded text-xs outline-none"
+            />
+            <button 
+              type="submit"
+              className="bg-[#febd69] hover:bg-[#f3a847] text-slate-900 px-5 py-2 rounded text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1 transition-all"
+            >
+              Generate Link <ArrowRight size={14} />
+            </button>
+          </form>
+
+          {toolOutput && (
+            <div className="mt-3 bg-emerald-900/90 border border-emerald-500 p-2.5 rounded text-xs flex items-center justify-between gap-2">
+              <span className="truncate text-[11px] font-mono text-emerald-200">{toolOutput}</span>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(toolOutput);
+                  setToolCopied(true);
+                  setTimeout(() => setToolCopied(false), 2000);
+                }}
+                className="bg-white text-emerald-900 px-3 py-1 rounded font-bold text-[10px] uppercase flex items-center gap-1 flex-shrink-0"
+              >
+                {toolCopied ? <Check size={12} /> : <Copy size={12} />}
+                {toolCopied ? 'Copied!' : 'Copy Link'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ⚡ 2. AUTO-FETCH & ADD TO STORE (Supports amzn.to short links) */}
+        <div className="bg-white p-5 rounded border border-gray-200 shadow-sm">
+          <h2 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-4 flex items-center gap-2">
             <Sparkles size={16} className="text-orange-500 animate-bounce" />
-            1-Click Amazon Auto-Pilot
+            1-Click Amazon Auto-Pilot (Supports Short & Long Links)
           </h2>
 
-          {/* ⚡ URL BAR ⚡ */}
           <div className="bg-orange-50/50 border border-orange-200 p-4 rounded mb-5 flex flex-col md:flex-row gap-3 items-end w-full">
             <div className="flex-1 w-full space-y-1">
               <label className="text-[10px] font-black text-orange-600 uppercase tracking-widest block">
-                Paste Amazon Product Link:
+                Paste Amazon Product Link (Short Link https://amzn.to/... bhi chalega):
               </label>
               <input 
                 type="text" 
                 className="w-full border border-gray-300 px-3 py-2 text-sm rounded outline-none focus:border-orange-500 bg-white text-slate-800" 
                 value={amazonUrl} 
                 onChange={(e) => setAmazonUrl(e.target.value)} 
-                placeholder="https://www.amazon.com/dp/B0DZ5KG7XG..." 
+                placeholder="https://amzn.to/47Y2hVI ya https://amazon.com/dp/..." 
               />
             </div>
             <button 
@@ -247,11 +308,11 @@ export default function SecureAdminPanel() {
               className="w-full md:w-auto bg-[#232f3e] text-[#febd69] px-6 py-2 h-[38px] rounded text-xs font-black hover:bg-slate-800 transition-all uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-60"
             >
               {isFetching ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              {isFetching ? 'Fetching Real Data...' : 'Auto Fetch Details'}
+              {isFetching ? 'Fetching Data...' : 'Auto Fetch Details'}
             </button>
           </div>
 
-          {/* 🖼️ LIVE PREVIEW BOX */}
+          {/* LIVE IMAGE PREVIEW */}
           {formData.image && (
             <div className="mb-5 p-3 bg-slate-50 border border-slate-200 rounded flex items-center gap-4">
               <div className="w-20 h-20 bg-white border rounded p-1 flex items-center justify-center flex-shrink-0">
@@ -259,7 +320,7 @@ export default function SecureAdminPanel() {
               </div>
               <div className="text-xs">
                 <span className="inline-block bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase mb-1">
-                  ✓ Real HD Image Loaded
+                  ✓ Real Image Connected
                 </span>
                 <p className="font-bold text-slate-800 line-clamp-1">{formData.title}</p>
                 <p className="text-gray-500 text-[11px] line-clamp-1 mt-0.5">{formData.description}</p>
@@ -275,7 +336,7 @@ export default function SecureAdminPanel() {
             </div>
 
             <div className="space-y-1 md:col-span-2">
-              <label className="text-[9px] font-black text-gray-400 uppercase">Product Description (Highlights)</label>
+              <label className="text-[9px] font-black text-gray-400 uppercase">Product Description</label>
               <input className="w-full border px-3 py-2 text-sm rounded outline-none bg-gray-50 text-slate-800 text-xs" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} placeholder="Key features..." />
             </div>
 
@@ -293,8 +354,8 @@ export default function SecureAdminPanel() {
             </div>
 
             <div className="space-y-1 md:col-span-2">
-              <label className="text-[9px] font-black text-gray-400 uppercase">Real Image Link (Auto-Filled)</label>
-              <input className="w-full border px-3 py-2 text-sm rounded outline-none bg-gray-50 text-slate-800 text-xs" value={formData.image} onChange={(e) => setFormData({...formData, image: e.target.value})} required placeholder="Image link will appear here..." />
+              <label className="text-[9px] font-black text-gray-400 uppercase">Image Link</label>
+              <input className="w-full border px-3 py-2 text-sm rounded outline-none bg-gray-50 text-slate-800 text-xs" value={formData.image} onChange={(e) => setFormData({...formData, image: e.target.value})} required placeholder="Image link..." />
             </div>
 
             <div className="space-y-1 md:col-span-2">
